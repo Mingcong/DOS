@@ -30,7 +30,7 @@ class RemoteBoss (serverName:String) extends Actor {
   def act() {
     alive(9018)
     register('remoteboss, self)
-    var str:Array[Char] = new Array[Char](10)
+    var str:Array[Char] = new Array[Char](20)
     val boss = select(Node(serverName, 9011), 'boss) 
     val hostname = InetAddress.getLocalHost.getHostName()
     val client = hostname+".cise.ufl.edu"
@@ -39,18 +39,17 @@ class RemoteBoss (serverName:String) extends Actor {
     var done:Int=0
     loop {
       react {
-      	case (prefix:String, b:Int, n:Int, m:Int) =>
-			var i:Long=0
+      	case (prefix:String, b:Long, n:Int, m:Int) =>
 	      	for (i <- b*n to b*n+n-1) {
-	      	  var k:Int=i
+	      	  var k:Long=i
 	      	  var len:Int=0
 	      	  var new_str=prefix
 	      	  while(k>=94){
-	      	    str(len)=char_set(k%94)
+	      	    str(len)=char_set((k%94).toInt)
 	      	    k=k/94
 	      	    len=len+1 
 	      	  }
-		  	  str(len)=char_set(k%94)
+		  	  str(len)=char_set((k%94).toInt)
               len=len+1
 	      	  for(j<-1 to len){
 	      	    new_str=new_str+str(len-j)

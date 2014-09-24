@@ -30,20 +30,19 @@ class WorkerActor extends Actor {
   
   //Implement the behavior of Worker
   def act() {
-   var str:Array[Char] = new Array[Char](10)
+   var str:Array[Char] = new Array[Char](20)
       react {
-      	case (prefix:String, b:Int, n:Int, m:Int,boss:Actor) =>
-		      var i:Long=0
+      	case (prefix:String, b:Long, n:Int, m:Int,boss:Actor) =>
 	      	for (i <- b*n to b*n+n-1) {
-	      	  var k:Int=i
+	      	  var k:Long=i
 	      	  var len:Int=0
 	      	  var new_str=prefix
 	      	  while(k>=94){
-	      	    str(len)=char_set(k%94)
+	      	    str(len)=char_set((k%94).toInt)
 	      	    k=k/94
 	      	    len=len+1 
 	      	  }
-		        str(len)=char_set(k%94)
+		        str(len)=char_set((k%94).toInt)
             len=len+1
 	      	  for(j<-1 to len){
 	      	    new_str=new_str+str(len-j)
@@ -69,8 +68,8 @@ class ServerActor(prefix: String, k:Int, len:Int) extends Actor {
   def act() {
     alive(9011)
     register('boss, self)
-    var i_th:Int=0
-    var j_th:Int=0
+    var i_th:Long=0
+    var j_th:Long=0
     var n_actor:Int=0
     var num:Long=1
     for(i<-0 to len-1)
