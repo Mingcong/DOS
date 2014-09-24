@@ -5,7 +5,7 @@ import scala.actors.remote._
 import scala.actors.remote.RemoteActor._
 import java.security.MessageDigest
 
-object Sha256 {
+class Sha256 {
   private val sha = MessageDigest.getInstance("SHA-256")
    def hex_digest(s: String): String = {
     sha.digest(s.getBytes)
@@ -48,8 +48,8 @@ class WorkerActor extends Actor {
 	      	  for(j<-1 to len){
 	      	    new_str=new_str+str(len-j)
 	      	  }
-	
-	      		var sha_str=Sha256.hex_digest(new_str)
+                var sha=new Sha256();
+	      		var sha_str=sha.hex_digest(new_str)
 	      		var sub_str=sha_str.substring(0, m)
 	      		var start_num=Integer.parseInt(sub_str, 16)
 	      		if (start_num==0){
@@ -67,14 +67,16 @@ class WorkerActor extends Actor {
 class ServerActor(prefix: String, k:Int, len:Int, n_actor:Int) extends Actor {
 	val N:Int=8836 //the number of work unit
   def act() {
-    alive(9011)
-    register('boss, self)
+	  
+    //alive(9011)
+    //register('boss, self)
     var i_th:Int=0
-    var n_actor:Int=0
+    var j_th:Int=0
     var num:Int=1
-    for(i<-0 to len-3)
+    for(i<-0 to len-1)
     	num=num*94
-    for(i<-0 to n_actor){
+    num=num/N
+    for(j<-0 to n_actor-1){
         val worker=new WorkerActor
         worker.start
         worker ! (prefix,i_th, N, k,self)
@@ -84,12 +86,13 @@ class ServerActor(prefix: String, k:Int, len:Int, n_actor:Int) extends Actor {
     loop {
     	 react {
     	    case (key:Int) =>  //
+    	        j_th=j_th+1
+    	        if((j_th>=num))
+			         exit()
     		    val worker=new WorkerActor
     		    worker.start
 		        worker ! (prefix,i_th, N, k,self)
-		        if((i_th>=num))
-			         exit()
-    	      i_th=i_th+1
+    	        i_th=i_th+1
     	    
        	  case (bitcoin: String, sha_bitcoin: String) =>  // receive a solution
         		println(bitcoin+"\t"+sha_bitcoin)
@@ -101,10 +104,11 @@ class ServerActor(prefix: String, k:Int, len:Int, n_actor:Int) extends Actor {
 object project1 {
   def main(args: Array[String]) {
     val prefix = if (args.length > 0) args(0) else "huilingzhang"  // the given starting string
-    val k = if (args.length > 1) args(1) toInt else 4              // # of 0 at the beginning of the sha-256 value
-    val len = if (args.length > 2) args(2) toInt else 3            // the maximum length of string added from the given string
-    val n_actor = if (args.length > 3) args(3) toInt else 4            // the number of actors
+    val k = if (args.length > 1) args(1) toInt else 5              // # of 0 at the beginning of the sha-256 value
+    val n_actor = if (args.length > 2) args(2) toInt else 4            // the number of actors
+    val len = if (args.length > 3) args(3) toInt else 4            // the maximum length of string added from the given string
     val w = new ServerActor(prefix,k,len,n_actor)
     w.start
+    
   }
 }
