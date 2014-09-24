@@ -1,9 +1,10 @@
+
 import scala.math._
 import scala.actors._
 import scala.actors.Actor._
 import scala.actors.remote._
 import scala.actors.remote.RemoteActor._
-import java.security.MessageDigest
+import java.net._
 
 object Sha256 {
   private val sha = MessageDigest.getInstance("SHA-256")
@@ -31,7 +32,9 @@ class RemoteBoss (serverName:String,clientName:String) extends Actor {
     register('remoteboss, self)
     var str:Array[Char] = new Array[Char](10)
     val boss = select(Node(serverName, 9011), 'boss) 
-    val client = clientName 
+    val hostname = InetAddress.getLocalHost.getHostName()
+    val client = hostname+".cise.ufl.edu"
+    println(client)
     boss ! (client,1)
     var done:Int=0
     loop {
