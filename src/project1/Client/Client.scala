@@ -16,7 +16,7 @@ object Sha256 {
   }
 }
 
-class RemoteBoss (serverName:String,clientName:String) extends Actor {
+class RemoteBoss (serverName:String) extends Actor {
   var char_set:Array[Char] = char_table() //a Array storing all valid characters in ASCII characters (from 33 to 126)
 
   //generate a char_set
@@ -34,7 +34,7 @@ class RemoteBoss (serverName:String,clientName:String) extends Actor {
     val boss = select(Node(serverName, 9011), 'boss) 
     val hostname = InetAddress.getLocalHost.getHostName()
     val client = hostname+".cise.ufl.edu"
-    println(client)
+    //println(client)
     boss ! (client,1)
     var done:Int=0
     loop {
@@ -76,8 +76,7 @@ class RemoteBoss (serverName:String,clientName:String) extends Actor {
 object Client{
 	def main(args: Array[String]){
 		val servername=if (args.length>0) args(0) else "lin114-11.cise.ufl.edu"
-		val clientname=if (args.length>1) args(1) else "lin114-00.cise.ufl.edu"
-		var r=new RemoteBoss(servername,clientname)
+		var r=new RemoteBoss(servername)
 		r.start
 	}
 }

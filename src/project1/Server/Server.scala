@@ -89,7 +89,7 @@ class ServerActor(prefix: String, k:Int, len:Int) extends Actor {
     	      i_th=i_th+1
     	    case (slave: String, key:Int) =>  //
 		        n_actor=n_actor+1; 
-		        //println(n_actor)
+		        println(n_actor)
     	      val remoteBoss=select(Node(slave, 9018), 'remoteboss)
 		        remoteBoss ! (prefix,i_th, N, k)
     	      i_th=i_th+1
