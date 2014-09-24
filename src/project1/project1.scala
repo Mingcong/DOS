@@ -72,7 +72,7 @@ class ServerActor(prefix: String, k:Int, len:Int, n_actor:Int) extends Actor {
     //register('boss, self)
     var i_th:Int=0
     var j_th:Int=0
-    var num:Int=1
+    var num:Long=1
     for(i<-0 to len-1)
     	num=num*94
     num=num/N
