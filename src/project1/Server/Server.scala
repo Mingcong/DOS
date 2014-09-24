@@ -70,10 +70,12 @@ class ServerActor(prefix: String, k:Int, len:Int) extends Actor {
     alive(9011)
     register('boss, self)
     var i_th:Int=0
+    var j_th:Int=0
     var n_actor:Int=0
     var num:Int=1
-    for(i<-0 to len-3)
+    for(i<-0 to len-1)
     	 num=num*94
+    num=num/N
     val worker=new WorkerActor
     worker.start
     worker ! (prefix,i_th, N, k,self)
@@ -81,28 +83,30 @@ class ServerActor(prefix: String, k:Int, len:Int) extends Actor {
     loop {
     	 react {
     	    case (key:Int) =>  //
+    	      	j_th=j_th+1
     		    val worker=new WorkerActor
     		    worker.start
 		        worker ! (prefix,i_th, N, k,self)
-		        if((i_th>=num)&&(n_actor==0))
+		        if((j_th>=num)&&(n_actor==0))
 			         exit()
-    	      i_th=i_th+1
+			    i_th=i_th+1
     	    case (slave: String, key:Int) =>  //
 		        n_actor=n_actor+1; 
 		        println(n_actor)
-    	      val remoteBoss=select(Node(slave, 9018), 'remoteboss)
+    	        val remoteBoss=select(Node(slave, 9018), 'remoteboss)
 		        remoteBoss ! (prefix,i_th, N, k)
-    	      i_th=i_th+1
+    	        i_th=i_th+1
     	    case (slave: String) =>  // 
-    	       val remoteBoss=select(Node(slave, 9018), 'remoteboss)
-    	       if(i_th<num){
+    	        j_th=j_th+1
+    	        val remoteBoss=select(Node(slave, 9018), 'remoteboss)
+    	        if(j_th<num){
 			         remoteBoss ! (prefix,i_th, N, k)
 		         }else{
         		   remoteBoss ! "Stop" //send a message to the newly started ClientActor
 			         n_actor=n_actor-1
 			         //println(n_actor)
 		         }
-		         if((i_th>=num)&&(n_actor==0))
+		         if((j_th>=num)&&(n_actor==0))
 			           exit()
     	       i_th=i_th+1
        	  case (bitcoin: String, sha_bitcoin: String) =>  // receive a solution
