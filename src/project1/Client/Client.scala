@@ -1,9 +1,9 @@
-
 import scala.math._
 import scala.actors._
 import scala.actors.Actor._
 import scala.actors.remote._
 import scala.actors.remote.RemoteActor._
+import java.security.MessageDigest
 import java.net._
 
 object Sha256 {
