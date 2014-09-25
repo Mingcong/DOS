@@ -1,0 +1,74 @@
+Project 1, COP5615 Distributed Operating Systems, FALL2014
+
+Implemented by group Members:
+
+
+------------------------------------------
+This submission includes source files for project1. In this implementation, assign sub-task to workers based on their runnig speed. Given a single multicores machine, we assign subtask to each actors dynamically, that is, actors get more subtask once they finish assigned work.  When multiple machines are given, the server do not need to know how many workers are avaliable before startup. The project1.scala inside this submission is the implementation for a single multicores machine. And Client.scala in Client folder and Server.scala inside Server folder are for bitcoins mining on multiple machines. 
+
+-------------------How to run---------------
+ --------First part:
+There are four parameters in running the project1.scala. It can be started by following command:
+scala project1 prefix k np len
+where prefix is the given leading string, k is the number leading 0's of coins we want to find, np is the number of actors, and len is most characters we add at the end of given string. Since we can add infinite number of characters at the end of string, to make this code not run forever, we fix the largest length of string we can add. 
+
+--------Second part:
+This part is the implementation for multiple machines. We first run the server actors and then, if there are avaliable workers, the server would assign them work according to the work unit. To run the server, the following command is needed:
+scala Server prefix k len
+where prefix is the given string, k is the number of leading 0s, and len is the maximum length of adding string(len>=2).
+
+Once receive the work from server, workers start to work and send the eligible bitcoins back to server, which are print out by server. The server's ip address is the only needed parameter to run workers. It can be run by following command:
+scala Client server_ip_address
+
+----------------Result reporting------------------
+1.In this implementation, we tested different size of sub-task and found that the best size of work unit is 94*94. In this project, the number of supported characters is 94. When we add more than 2 characters at the end of given string, we divide the work into same parts of size 94*94, and the best performance is obtained. Once a worker finish its current work, it would notify server and server would assign it a new part of work. 
+For 94*94
+74.835u 4.176s 0:54.02 146.2%	0+0k 0+232io 0pf+0w
+For 94*94*47
+65.169u 1.927s 0:54.36 123.3%	0+0k 0+224io 0pf+0w
+For 94*47
+76.711u 5.748s 0:58.05 142.0%	0+0k 0+104io 0pf+0w
+
+2. The result of running our program for scala project1.scala to find bitcoin with at least 8 leading 0s:
+huilingzhang$E)4$	000000006f22ca6c63cd048cbd8cb2f2cf0adb8121c7b57478c179764f9d6a3a
+huilingzhangZ3o6u	00000000250103814699ded9683713288b9b980feafbca249f4ee7c2c051d85a
+huilingzhang"9_d*l	00000000608c2e72fcac49a12fcfd8f5205b9c874fac6c895d2ffc06631bc9a0
+huilingzhang##0:"T	00000000bc830238a27ded9b1ff1011a07114dd9272207900e2dfe6ebb2d09fc
+huilingzhang">y)oC	00000000064800091bcfe709dbe42931b447559a8028c4051c28c6d01bc427e0
+huilingzhang'c_vFF	00000000543b5a7cc86fab40106630847ee6edd4a5003b91cf6d6e4da6f77d10
+huilingzhang't}.G0	000000002ae6aec4a99f174db6b41427d9dba90e9d7823669a346fb599667109
+huilingzhang$(Drd;	00000000f1be3de3906c83a51a097d3e217cffe05724908294ef124915f1e5d8
+huilingzhang(1~jV8	00000000c4069b55c8fa89c89f33c72806660a02b84af478213087d520355971
+huilingzhang$E3hD)	00000000ed3457bc0ca88a45b3f8c59472d2fdfb9bb394ff825146fa890461a0
+huilingzhang)*C}Jf	000000009205762eba79b108f0719592d3031ee01273f9658a543c6166af821e
+huilingzhang)y<O8t	00000000f226a432064f254ff660b31ba2625da428cb574d08484052db0c2310
+huilingzhang*T=15X	00000000c6e5a921bc3989473329d02ab53f3781e63951fe00b7cc3220fb11f2
+huilingzhang,1r%3H	0000000016ee0bccf169215424741cacd29283735647c4f013c215be5fe9fdaa
+huilingzhang-SvC=&	00000000c6878b9ca8ecdd765a37fc7172b3cf121c095162cbfba8713338ac4b
+huilingzhang'(l*ag	000000000e5889e761350de2583dec162d55b40d47f9537190c5cf319b0dc646
+huilingzhang.K}r3t	00000000bbf31f7e5b97e8e3e79b8245216fb90681aa9626952df6a2f137b18c
+huilingzhang.UzI&.	00000000d7a9f6932601fbe395bfa0e1a276d3d571f909ab350bd6a0191000d3
+huilingzhang'Yt;cC	00000000751d47b8008c1e71385ba86a8fff64494332c091fd59e2abf17b7e2b
+huilingzhang0*JaUS	00000000cb7479fdc9cf279277f9b9db0215e133725fd949b9d105e958ad2775
+huilingzhang/5!9-m	000000007962f9c6baa0a5f901331e71bb4c6861ddb05008b6b09020b001c25a
+huilingzhang0EuP6.	00000000917757289003bf5d910cc3342d58bd087df65f080a3434f1dccb458c
+huilingzhang0C%=7F	000000001d584ebe5d7df231ccdaa8b02e021362190282ea5d144ce008e5322e
+huilingzhang1{e"qv	000000002ffcdf3c32a3456456dff22083c1261334a246a4dde0094de005edfb
+huilingzhang2.dLH/	00000000302e2f4536d503387d1a604427f8501679473f7762ddf24823cec6b5
+huilingzhang24mhd5	00000000da349b6e4c44a63f323769063befa23d68c940f72590034fe4b37c67
+huilingzhang27_G<Q	00000000369aae00cc61b25d1cdaaf3bf8d6783005b78c628160857b7607e667
+huilingzhang3&04Dw	00000000f9ba9e4f06459c15f3136c273129b92d0affc66b08773596635f0f50
+huilingzhang2~Cy'S	00000000bae923689cce6181975ad15acce80af7f64d9eb9fc0ff3727aaef780
+
+
+3. The information of running time and the ratio of CPU time to REAL TIME is given as follows:
+When we run 4 actors to find bitcoins with 5 leading 0s when add 4 characters at the end of given string "huilingzhang": 
+time scala project1 huilingzhang 5 4 4
+868.779u 13.164s 3:44.13 393.4% 0+0k 0+488io 0pf+0w
+Thus, the ratio is 393.4%, which shows that our project performs well.
+
+4. The coin with the 9 leading 0s we managed to find is given as follows:
+huilingzhang">y)oC	00000000064800091bcfe709dbe42931b447559a8028c4051c28c6d01bc427e0
+huilingzhang'(l*ag	000000000e5889e761350de2583dec162d55b40d47f9537190c5cf319b0dc646
+
+5. We are able to run our code with up to 10 machines.

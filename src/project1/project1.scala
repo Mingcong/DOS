@@ -67,8 +67,6 @@ class ServerActor(prefix: String, k:Int, len:Int, n_actor:Int) extends Actor {
 	val N:Int=8836 //the number of work unit
   def act() {
 	  
-    //alive(9011)
-    //register('boss, self)
     var i_th:Long=0
     var j_th:Long=0
     var num:Long=1
