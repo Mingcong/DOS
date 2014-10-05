@@ -12,7 +12,7 @@ case object Remove_Me extends Message
 case object Gossip_Exit extends Message
 case object Self_Message extends Message
 case object Build_Network extends Message
-case class Init_Node (i: Int, neighbors: Array[ActorRef])
+case class Init_Node (neighbors: Array[ActorRef])
 case class PushSum (ss: Double, ww: Double)
 case class PushSum_Exit (result: Double)
 
@@ -20,7 +20,6 @@ case class PushSum_Exit (result: Double)
 
 abstract class Node extends Actor {
   val rand = new Random
-  var id: Int = 0
   var Neighbors:Array[ActorRef] = Array.empty
   var rumor_count:Int = 0
   def Random_neighbor():ActorRef = {
@@ -35,8 +34,7 @@ abstract class Node extends Actor {
     Neighbors = Neighbors filter (_ != Actor_i)
     return Neighbors
   }
-  def Init(i: Int, neighbors: Array[ActorRef]) {
-    id = i
+  def Init(neighbors: Array[ActorRef]) {
     Neighbors = neighbors
   }
   def Send_Remove() {
@@ -45,7 +43,7 @@ abstract class Node extends Actor {
 }
 
 class GossipNode(master: ActorRef) extends Node {
-  context.system.scheduler.schedule(0 milliseconds, 10 milliseconds, self, Self_Message)
+  context.system.scheduler.schedule(0 milliseconds, 1 milliseconds, self, Self_Message)
   
   def Send_Rumor(random_neighbor: ActorRef) {
     if(rumor_count > 0) {
@@ -55,14 +53,14 @@ class GossipNode(master: ActorRef) extends Node {
   
   def receive = {
     
-      case Init_Node(i, neighbors) => Init(i, neighbors)
-    		  						//println(i+ "init")
+      case Init_Node(neighbors) => Init(neighbors)
+    		  					
       case Rumor => rumor_count = rumor_count + 1
 //      				 if(rumor_count > 10)
                        //println(rumor_count + ":" + self.path.name + " receive rumor from " + sender.path.name)
       				 if(rumor_count == 10) {
       				   Send_Remove()
-      				   println(id+" exit")
+      				   println(self.path.name+" exit")
       				   master ! Gossip_Exit
       				   //context.stop(self)
       				   context.system.scheduler.scheduleOnce(1000 milliseconds) {
@@ -90,8 +88,8 @@ class PushSumNode (master: ActorRef) extends Node {
       w = w /2
   }
   def receive = {
-    case Init_Node(i, neighbors) => Init(i, neighbors)
-    								 s = i
+    case Init_Node(neighbors) => Init(neighbors)
+    								 s = self.path.name.toInt
     case Rumor => Send_SW(Random_neighbor())
     case PushSum(ss, ww) => if(abs(s/w-(ss+s)/(ww+w)) < 1e-10) {
     					       nConv = nConv +1
@@ -100,7 +98,7 @@ class PushSumNode (master: ActorRef) extends Node {
     						 }
     						 s = s + ss
     						 w = w + ww
-    				         if(nConv == 3) {
+    				         if(nConv == 5) {
     				           master ! PushSum_Exit(s/w)
     				         } else{
     				           Send_SW(Random_neighbor())
@@ -114,8 +112,8 @@ class PushSumNode (master: ActorRef) extends Node {
 
 abstract class Network(val numNodes: Int, val algorithm: String) extends Actor {
   val rand = new Random
-  var numof_GossipNode: Int=0
-  val start: Long = System.currentTimeMillis
+  var numof_GossipNode: Int = 0
+  var start: Long = 0
   var  Net:Array[ActorRef] = new Array[ActorRef](numNodes)
 
   def Neighbors(id:Int):Array[ActorRef]
@@ -129,16 +127,14 @@ abstract class Network(val numNodes: Int, val algorithm: String) extends Actor {
     												       Net(i) = context.actorOf(Props(new PushSumNode(self)),i.toString)
     												     }
 								    }
-      					   var i: Int = 0
     			  		   for(node <- Net) {
     			  		     val neighbors = Neighbors(node.path.name.toInt)
 //    			  		     println("actor " +i+" neighbors are ")
 //    			  		     for(n <- neighbors)
 //    			  		       println(n.path.name)
-    			  		     node ! Init_Node(i,neighbors)
-    			  		     i = i + 1
+    			  		     node ! Init_Node(neighbors)
     			  		   }
-    					   
+    					   start = System.currentTimeMillis
       					   Net(rand.nextInt(numNodes)) ! Rumor
 
     			  		   
@@ -197,9 +193,7 @@ class Im_Two_D(override val rows: Int, override val cols: Int, override val algo
     }
     return true
   }
-  
   override def Neighbors(id:Int):Array[ActorRef] ={
-    val x = id
     neighbors_2D = super.Neighbors(id)
     var Net1 = Net filter(_.path.name.toInt != id)
     var other_actor = Net1 filter (inRange(_))
@@ -214,7 +208,7 @@ class Im_Two_D(override val rows: Int, override val cols: Int, override val algo
 object project2 {
   def main(args: Array[String]) {
     val numNodes = if (args.length > 0) args(0) toInt else 100  // the number of Nodes
-    val topology = if (args.length > 1) args(1)  else "full"   // topology
+    val topology = if (args.length > 1) args(1)  else "line"   // topology
     val algorithm = if (args.length > 2) args(2) else "push-sum" // algorithm
     val rows = List.range(math.sqrt(numNodes) toInt, 0, -1).find(numNodes%_==0).get
     val cols = numNodes/rows
