@@ -81,28 +81,42 @@ class PushSumNode (master: ActorRef) extends Node {
   var s : Double = 0
   var w : Double = 1
   var nConv: Int = 0
+  var flag: Boolean = true
+  
+  context.system.scheduler.schedule(0 milliseconds, 1 milliseconds, self, Self_Message)
   
   def Send_SW(random_neighbor: ActorRef) {
+    if(rumor_count > 0 ) {
       random_neighbor ! PushSum(s/2, w/2)
       s = s /2
       w = w /2
+    }//println(self.path.name + " sum=" + s)
   }
   def receive = {
     case Init_Node(neighbors) => Init(neighbors)
     								 s = self.path.name.toInt
-    case Rumor => Send_SW(Random_neighbor())
-    case PushSum(ss, ww) => if(abs(s/w-(ss+s)/(ww+w)) < 1e-10) {
+    case Rumor => rumor_count = rumor_count + 1; Send_SW(Random_neighbor())
+    case PushSum(ss, ww) =>// println(self.path.name)
+      						rumor_count = rumor_count + 1
+    						if(abs(s/w-(ss+s)/(ww+w)) < 1e-10) {
     					       nConv = nConv +1
     						 } else{
     						   nConv = 0
     						 }
     						 s = s + ss
     						 w = w + ww
-    				         if(nConv == 5) {
+    						 //println(self.path.name + " sum=" + s)
+    				         if(nConv == 5 && flag) {
+    				           flag = false
+    				           println(self.path.name + "sum=" + s/w)
     				           master ! PushSum_Exit(s/w)
     				         } else{
-    				           Send_SW(Random_neighbor())
+    				           //Send_SW(Random_neighbor())
     				         }
+    						 if(nConv == 5 ) {
+    						   println(self.path.name + "sum=" + s/w)
+    						 }
+    case Self_Message => Send_SW(Random_neighbor())
     				           
     
   }
@@ -148,13 +162,16 @@ abstract class Network(val numNodes: Int, val algorithm: String) extends Actor {
       				       }
     					   
     					 }
-    case PushSum_Exit(result) => var duration = (System.currentTimeMillis - start).millis
-    				   			  println("run time =  " + duration)
-    							  println("sum =  " + result*numNodes)
-    							  println(sender.path.name)
-        			   			  context.system.scheduler.scheduleOnce(1 seconds) {
-    				     			context.system.shutdown()
-    							  }
+    case PushSum_Exit(result) => numof_GossipNode += 1
+    					 //println("finish" + numof_GossipNode)
+    					 if(numof_GossipNode == numNodes) {
+    					   var duration = (System.currentTimeMillis - start).millis
+    					   println("run time =  " + duration)
+    					   context.system.scheduler.scheduleOnce(1 seconds) {
+    					     context.system.shutdown()
+      				       }
+    					   
+    					 }
   }
   
   
@@ -207,7 +224,7 @@ class Im_Two_D(override val rows: Int, override val cols: Int, override val algo
 
 object project2 {
   def main(args: Array[String]) {
-    val numNodes = if (args.length > 0) args(0) toInt else 100  // the number of Nodes
+    val numNodes = if (args.length > 0) args(0) toInt else 10  // the number of Nodes
     val topology = if (args.length > 1) args(1)  else "line"   // topology
     val algorithm = if (args.length > 2) args(2) else "push-sum" // algorithm
     val rows = List.range(math.sqrt(numNodes) toInt, 0, -1).find(numNodes%_==0).get
