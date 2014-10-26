@@ -18,6 +18,10 @@ case class initTable(finalNode: Node_Actor, Table: ArrayBuffer[Node_Actor])
 case class insertLeafs(finalNode:Node_Actor,leafLarge:ArrayBuffer[Node_Actor],leafSmall:ArrayBuffer[Node_Actor])
 case class updateBigLeaf(leaf:Node_Actor)
 case class updateSmallLeaf(leaf:Node_Actor)
+case class Jumps(jumps:Int)
+case object SendRequest extends Message
+case object Calculate extends Message
+case object MessagesReceived extends Message
 
 class Node_Actor {
   var node : ActorRef = null;
@@ -27,13 +31,22 @@ class Node_Actor {
 }
 object project3_smc {
   
- class PastryNode(ID:BigInt,base: Int) extends Actor {
+ class PastryNode(ID:BigInt,base: Int, Listener:ActorRef) extends Actor {
   var routingTable = ArrayBuffer[Node_Actor]()
   var leafSmall,leafLarge = ArrayBuffer[Node_Actor]()// leaf array, smaller than us , starting with smallest
   val(rows,cols) = (32, base)
   var joined: Boolean = false;
   
   def receive = {
+    case SendRequest => {
+	  var number : BigInt = genID( base );
+	  var msgref : Node_Actor = new Node_Actor();
+	  msgref.id = genID(base)
+	  msgref.jumps = 0;
+	
+	  self ! Route( number.toString, msgref );
+    }
+          
     case Join(node) => {
       var myNode = new Node_Actor()
       routingTable = routingTable.padTo(rows*cols, null)
@@ -125,7 +138,8 @@ object project3_smc {
 	    key.node ! initTable(finalNode, routingTable)
 	    key.node ! insertLeafs(finalNode, leafLarge , leafSmall)
 	  } else{
-	    key.jumps = key.jumps+ 1
+	    //key.jumps = key.jumps+ 1
+	    Listener ! Jumps(key.jumps)
 	  }
     }
     
@@ -229,6 +243,10 @@ object project3_smc {
 	    }
 	    i += 1;
       }
+      if (leafLarge.size > base) {
+	    leafLarge = leafLarge.dropRight(1);
+      }
+      
     }
       
    def sendToleaf(msg:String, key: Node_Actor) {
@@ -310,14 +328,36 @@ object project3_smc {
 
 }
 
-
+  class Listener extends Actor {
+    var sum: Double = 0 /**sum of all jumps*/
+    var messages = 0 /**number of messages received*/
+    def receive = {
+      case Jumps(jumps : Int) => {
+	    sum += jumps
+	    messages += 1
+      }
+      case Calculate => {
+	    var average: Double = 0
+	    if (messages != 0) {
+	      average = sum/messages /**average number of jumps that a message took*/
+	    }
+	    sender ! average
+      }
+      case MessagesReceived => {
+	    sender ! messages
+      }
+    }
+  }
+  
   def main(args: Array[String]) {
-    val numNodes = if (args.length > 0) args(0) toInt else 100  // the number of Nodes
-    val numRequests = if (args.length > 1) args(1)  else 1   // the number of Requests for each node
+    val numNodes = if (args.length > 0) args(0) toInt else 10000  // the number of Nodes
+    val numRequests = if (args.length > 1) args(1) toInt else 5   // the number of Requests for each node
       
     val system = ActorSystem("PastrySystem")
+    val listener = system.actorOf(Props(classOf[Listener]), "listener")
     val b = 4 
     val base = math.pow(2,b).toInt //base
+ 
     var ID:BigInt = 0
     var IDs : ArrayBuffer[BigInt] = ArrayBuffer();
     var counter: Int =0
@@ -328,7 +368,7 @@ object project3_smc {
 	    ID = genID(base) 
       }
       IDs.append( ID );
-      var node = system.actorOf(Props(classOf[PastryNode],ID,base), counter.toString)
+      var node = system.actorOf(Props(classOf[PastryNode],ID,base,listener), counter.toString)
       nodeArray.append(node)
       counter += 1
     }
@@ -346,9 +386,29 @@ object project3_smc {
       while (!node_ready) {
 	    val future = nodeArray(i) ? isReady
 	    node_ready =  Await.result(future.mapTo[Boolean], timeout.duration )
-	    println(i)
+	    //println(i)
       }
     }
+    
+    //import system.dispatcher
+    
+    for (i <- 0 until numNodes) {
+      system.scheduler.schedule(1 seconds, 1 seconds, nodeArray(i), SendRequest );
+    }
+
+    var Messages: Int = 0
+    /**ask listener*/
+    while (Messages < numNodes*numRequests) {
+      implicit val timeout = Timeout(20 seconds)
+      val future = listener ? MessagesReceived
+      Messages =  Await.result(future.mapTo[Int], timeout.duration )
+    }
+    
+    implicit val timeout2 = Timeout(20 seconds)
+    val future2 = listener ? Calculate
+    val average =  Await.result(future2.mapTo[Double], timeout2.duration )
+    println("Average jumps: " + average)
+    
     
     system.shutdown  
   }
