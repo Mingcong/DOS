@@ -11,10 +11,11 @@ import akka.pattern.ask
 sealed trait Message
 case class Join(node:ActorRef) extends Message
 case object isReady extends Message
+case class allUpdate(update:Boolean) extends Message
 case class Route(msg:String, key:Node_Actor)
 case class Deliver(msg:String, key:Node_Actor)
 case class insertRoutingTable(routing: ArrayBuffer[Node_Actor],node:Node_Actor)
-case class initTable(finalNode: Node_Actor, Table: ArrayBuffer[Node_Actor])
+case class updateRoutingTable(routing: ArrayBuffer[Node_Actor],node:Node_Actor)
 case class insertLeafs(finalNode:Node_Actor,leafLarge:ArrayBuffer[Node_Actor],leafSmall:ArrayBuffer[Node_Actor])
 case class updateBigLeaf(leaf:Node_Actor)
 case class updateSmallLeaf(leaf:Node_Actor)
@@ -27,8 +28,8 @@ class Node_Actor {
   var node : ActorRef = null;
   var id : BigInt = BigInt(-1);
   var jumps: Int = 0
-
 }
+
 object project3_smc {
   
  class PastryNode(ID:BigInt,base: Int, Listener:ActorRef) extends Actor {
@@ -40,11 +41,10 @@ object project3_smc {
   def receive = {
     case SendRequest => {
 	  var number : BigInt = genID( base );
-	  var msgref : Node_Actor = new Node_Actor();
-	  msgref.id = genID(base)
-	  msgref.jumps = 0;
-	
-	  self ! Route( number.toString, msgref );
+	  var msgDest : Node_Actor = new Node_Actor();
+	  msgDest.id = genID(base)
+	  msgDest.jumps = 0;	
+	  self ! Route( number.toString, msgDest );
     }
           
     case Join(node) => {
@@ -109,20 +109,11 @@ object project3_smc {
     
     case insertRoutingTable(preRoutingTable, preNode) => {
       val l = shl(ID, preNode.id)
-      var i: Int =0
-      var j: Int =0
-      for(i<-0 until l){
-        for(j<-0 until cols){
-          if(routingTable(i*cols+j) == null){
-            routingTable(i*cols+j) = preRoutingTable(i*cols+j)
-          }     
-        }
-      }
       val m = digit(ID, l)
       val n = digit(preNode.id , l)
       for(j<-0 until cols){
         if((j != m) && (j != n) ){
-          if(routingTable(i*cols+j) == null){
+          if(preRoutingTable(l*cols+j) != null){
             routingTable(l*cols+j) = preRoutingTable(l*cols+j)
           }
         }
@@ -130,35 +121,43 @@ object project3_smc {
       routingTable(l*cols+n) = preNode
     }
     
+    case updateRoutingTable(joinNodeRoutingTable, joinNode) => {
+      val l = shl(ID, joinNode.id)
+      var i: Int =0
+      var j: Int =0
+      for(i<-0 until l){
+        for(j<-0 until cols){
+          if(routingTable(i*cols+j) == null){
+            routingTable(i*cols+j) = joinNodeRoutingTable(i*cols+j)
+          }     
+        }
+      }
+      val m = digit(ID, l)
+      val n = digit(joinNode.id , l)
+      for(j<-0 until cols){
+        if((j != m) && (j != n) ){
+          if(routingTable(l*cols+j) == null){
+            routingTable(l*cols+j) = joinNodeRoutingTable(l*cols+j)
+          }
+        }
+      }
+      routingTable(l*cols+n) = joinNode      
+    }
+        
     case Deliver(msg, key) => {
 	  if (msg == "Join") {
 	    var finalNode : Node_Actor = new Node_Actor()
 	    finalNode.id = ID
 	    finalNode.node = self
-	    key.node ! initTable(finalNode, routingTable)
+	    key.node ! insertRoutingTable(routingTable, finalNode)
 	    key.node ! insertLeafs(finalNode, leafLarge , leafSmall)
+	    key.node ! allUpdate(true)
 	  } else{
-	    //key.jumps = key.jumps+ 1
 	    Listener ! Jumps(key.jumps)
 	  }
     }
     
-    
-    case initTable(finalNode, finalRoutTable) => {
-      val l = shl(ID,finalNode.id)
-      val m = digit(ID, l)
-      val n = digit(finalNode.id , l)
-      routingTable(l*cols+n) = finalNode
-      for(i<-0 until cols){
-        if(i != m){ //&& !=n
-          if(finalRoutTable(l*cols+i) != null){
-            routingTable(l*cols+i) = finalRoutTable(l*cols+i)
-          }
-        }
-      }
-      
-    }
-    case insertLeafs(finalNode, bigLeaf , smallLeaf) => {
+    case insertLeafs(finalNode, bigLeaf, smallLeaf) => {
       for(i<-0 until bigLeaf.length){
         if(bigLeaf(i).id > ID){
           addToLargeLeafs(bigLeaf(i))
@@ -174,6 +173,9 @@ object project3_smc {
       }else{
         addToSmallLeafs(finalNode)
       }
+    }
+    
+    case allUpdate(update) => {
       val joinNode = new Node_Actor()
       joinNode.id = ID
       joinNode.node = self
@@ -187,31 +189,27 @@ object project3_smc {
       
       for(i<-0 until routingTable.length){
         if(routingTable(i) != null){
-          routingTable(i).node ! insertRoutingTable(routingTable, joinNode)
+          routingTable(i).node ! updateRoutingTable(routingTable, joinNode)
         }
       }
-      joined = true
+      joined = true  
     }
     
-    case updateBigLeaf(leaf:Node_Actor) => {
+    case updateBigLeaf(leaf) => {
 	  if(leaf.id>ID){
 	    addToLargeLeafs(leaf)
 	  }
     }
     
-    case updateSmallLeaf(leaf:Node_Actor) => {
+    case updateSmallLeaf(leaf) => {
 	  if(leaf.id < ID) {
 	    addToSmallLeafs(leaf)
 	  }
     }
     
     case isReady => {
-      sender ! joined
-      
-    }
-    
-      
-      
+      sender ! joined  
+    }   
     
   }
 
@@ -255,22 +253,14 @@ object project3_smc {
       minNode.id = ID;
       minNode.node = self;
       var dist: BigInt =0
-      for (i <- 0 until leafSmall.size) {
-        dist = (leafSmall(i).id - key.id).abs;
+      val leaf = leafSmall ++ leafLarge
+      for (i <- 0 until leaf.size) {
+	    dist = (leaf(i).id - key.id).abs;
 	    if (dist < minDist) {
 	      minDist = dist;
-	      minNode = leafSmall(i);
+	      minNode = leaf(i);
 	    }
-      }
-      
-      for (i <- 0 until leafLarge.size) {
-	    dist = (leafLarge(i).id - key.id).abs;
-	    if (dist < minDist) {
-	      minDist = dist;
-	      minNode = leafLarge(i);
-	    }
-      }
-   
+      }    
       minNode.node ! Deliver(msg, key );
    }
     
@@ -280,22 +270,14 @@ object project3_smc {
       minNode.id = ID;
       minNode.node = self;
       var dist: BigInt =0
-      for (i <- 0 until leafSmall.size) {
-        dist = (leafSmall(i).id - key.id).abs;
+      val leaf = leafSmall ++ leafLarge     
+      for (i <- 0 until leaf.size) {
+	    dist = (leaf(i).id - key.id).abs;
 	    if (dist < minDist) {
 	      minDist = dist;
-	      minNode = leafSmall(i);
+	      minNode = leaf(i);
 	    }
-      }
-      
-      for (i <- 0 until leafLarge.size) {
-	    dist = (leafLarge(i).id - key.id).abs;
-	    if (dist < minDist) {
-	      minDist = dist;
-	      minNode = leafLarge(i);
-	    }
-      }
-   
+      } 
       minNode.node ! Route( msg, key );
    }
       
@@ -317,20 +299,27 @@ object project3_smc {
     return i;  
   }
   
-  def digit(id: BigInt, l: Int) : Int = {
-      var k : Int = 31 - l;
-      var tmp : BigInt  = id % BigInt(16).pow(k + 1)
-      tmp /= BigInt(16).pow(k)
-      val col : Int = tmp.toInt     
-      return col; 
-    }
+  def digit(id: BigInt, l: Int) = BigtoArray(id, 16)(31-l)
+ 
   
+  def BigtoArray(ID: BigInt, base:Int):ArrayBuffer[Int]={
+    var ID_Array = ArrayBuffer[Int]()
+    var counter = 0
+    var id = ID
+    val bbase = BigInt(base)
+    while(counter<32){
+      ID_Array = ID_Array += (id.mod(bbase)).toInt
+      id = id/(bbase)
+      counter += 1
+      }
+    return ID_Array
+  }
 
 }
 
   class Listener extends Actor {
-    var sum: Double = 0 /**sum of all jumps*/
-    var messages = 0 /**number of messages received*/
+    var sum: Double = 0 
+    var messages = 0 
     def receive = {
       case Jumps(jumps : Int) => {
 	    sum += jumps
@@ -339,7 +328,7 @@ object project3_smc {
       case Calculate => {
 	    var average: Double = 0
 	    if (messages != 0) {
-	      average = sum/messages /**average number of jumps that a message took*/
+	      average = sum/messages 
 	    }
 	    sender ! average
       }
@@ -350,8 +339,8 @@ object project3_smc {
   }
   
   def main(args: Array[String]) {
-    val numNodes = if (args.length > 0) args(0) toInt else 10000  // the number of Nodes
-    val numRequests = if (args.length > 1) args(1) toInt else 5   // the number of Requests for each node
+    val numNodes = if (args.length > 0) args(0) toInt else 7000  // the number of Nodes
+    val numRequests = if (args.length > 1) args(1) toInt else 10   // the number of Requests for each node
       
     val system = ActorSystem("PastrySystem")
     val listener = system.actorOf(Props(classOf[Listener]), "listener")
@@ -371,8 +360,7 @@ object project3_smc {
       var node = system.actorOf(Props(classOf[PastryNode],ID,base,listener), counter.toString)
       nodeArray.append(node)
       counter += 1
-    }
-    
+    }  
       //add first node
     nodeArray(0) ! Join(null)  
   
@@ -380,24 +368,19 @@ object project3_smc {
     var i : Int = 0;
     for (i <- 1 until numNodes) {
       nodeArray(i) ! Join(nodeArray(i -1)) 
-      //wait for join process to complete
       implicit val timeout = Timeout(20 seconds)
       var node_ready: Boolean = false
       while (!node_ready) {
 	    val future = nodeArray(i) ? isReady
 	    node_ready =  Await.result(future.mapTo[Boolean], timeout.duration )
-	    //println(i)
       }
     }
-    
-    //import system.dispatcher
     
     for (i <- 0 until numNodes) {
       system.scheduler.schedule(1 seconds, 1 seconds, nodeArray(i), SendRequest );
     }
 
     var Messages: Int = 0
-    /**ask listener*/
     while (Messages < numNodes*numRequests) {
       implicit val timeout = Timeout(20 seconds)
       val future = listener ? MessagesReceived
@@ -407,48 +390,22 @@ object project3_smc {
     implicit val timeout2 = Timeout(20 seconds)
     val future2 = listener ? Calculate
     val average =  Await.result(future2.mapTo[Double], timeout2.duration )
-    println("Average jumps: " + average)
-    
-    
+    println("Num = " + numNodes + "  Average jumps: " + average)
+   
     system.shutdown  
   }
-
-
   
   def genID(base:Int): BigInt = { 
     val random = new Random()
-    var ID = new ArrayBuffer[Int]()
-
+    var ID_digit:Int =0
+    var ID_Big:BigInt = 0
     var counter = 0
     while(counter<32){ 
-      ID = ID += (random.nextInt(base.toInt))
+      ID_digit = (random.nextInt(base.toInt))
+      var a = (BigInt(ID_digit))*(BigInt(base).pow(counter))
+      ID_Big += a
       counter += 1
     } 
-    return Array_to_Big(ID, base);
-  }
-  
-  def Array_to_Big(ID:ArrayBuffer[Int], base:Int):BigInt = {
-    var ID_Big:BigInt = 0
-    var index = 0
-    while(index < ID.length){
-      var a = (BigInt(ID(index)))*(BigInt(base).pow(index))
-      ID_Big += a
-      index += 1
-    }
     return ID_Big
-  }
-  
-  def BigtoArray(ID: BigInt, base:Int):ArrayBuffer[Int]={
-    var ID_Array = ArrayBuffer[Int]()
-    var counter = 0
-    var id = ID
-    val bbase = BigInt(base)
-    while(counter<32){
-      ID_Array = ID_Array += (id.mod(bbase)).toInt
-      id = id/(bbase)
-      counter += 1
-      }
-    return ID_Array
-  }
-    
+  }  
 }
