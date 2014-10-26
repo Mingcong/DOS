@@ -1,5 +1,4 @@
-import akka.actor.{ActorSystem, Actor, Props}
-import akka.actor.ActorRef
+import akka.actor.{ActorSystem, Actor, Props,ActorRef}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Random
@@ -11,7 +10,7 @@ import akka.pattern.ask
 sealed trait Message
 case class Join(node:ActorRef) extends Message
 case object isReady extends Message
-case class allUpdate(update:Boolean) extends Message
+case object UpdateAll extends Message
 case class Route(msg:String, key:Node_Actor)
 case class Deliver(msg:String, key:Node_Actor)
 case class insertRoutingTable(routing: ArrayBuffer[Node_Actor],node:Node_Actor)
@@ -21,20 +20,19 @@ case class updateBigLeaf(leaf:Node_Actor)
 case class updateSmallLeaf(leaf:Node_Actor)
 case class Jumps(jumps:Int)
 case object SendRequest extends Message
-case object Calculate extends Message
-case object MessagesReceived extends Message
+case object BuildNetwork extends Message
+case object StartWork extends Message
 
 class Node_Actor {
   var node : ActorRef = null;
-  var id : BigInt = BigInt(-1);
+  var id : BigInt = 0;
   var jumps: Int = 0
 }
 
 object project3_smc {
-  
- class PastryNode(ID:BigInt,base: Int, Listener:ActorRef) extends Actor {
+ class PastryNode(ID:BigInt,base: Int, Boss:ActorRef) extends Actor {
   var routingTable = ArrayBuffer[Node_Actor]()
-  var leafSmall,leafLarge = ArrayBuffer[Node_Actor]()// leaf array, smaller than us , starting with smallest
+  var leafSmall,leafLarge = ArrayBuffer[Node_Actor]()
   val(rows,cols) = (32, base)
   var joined: Boolean = false;
   
@@ -123,8 +121,6 @@ object project3_smc {
     
     case updateRoutingTable(joinNodeRoutingTable, joinNode) => {
       val l = shl(ID, joinNode.id)
-      var i: Int =0
-      var j: Int =0
       for(i<-0 until l){
         for(j<-0 until cols){
           if(routingTable(i*cols+j) == null){
@@ -151,9 +147,9 @@ object project3_smc {
 	    finalNode.node = self
 	    key.node ! insertRoutingTable(routingTable, finalNode)
 	    key.node ! insertLeafs(finalNode, leafLarge , leafSmall)
-	    key.node ! allUpdate(true)
+	    key.node ! UpdateAll
 	  } else{
-	    Listener ! Jumps(key.jumps)
+	    Boss ! Jumps(key.jumps)
 	  }
     }
     
@@ -175,7 +171,7 @@ object project3_smc {
       }
     }
     
-    case allUpdate(update) => {
+    case UpdateAll  => {
       val joinNode = new Node_Actor()
       joinNode.id = ID
       joinNode.node = self
@@ -248,38 +244,29 @@ object project3_smc {
     }
       
    def sendToleaf(msg:String, key: Node_Actor) {
-      var minDist : BigInt = (ID - key.id).abs;
-      var minNode :Node_Actor = new Node_Actor();
-      minNode.id = ID;
-      minNode.node = self;
-      var dist: BigInt =0
-      val leaf = leafSmall ++ leafLarge
-      for (i <- 0 until leaf.size) {
-	    dist = (leaf(i).id - key.id).abs;
-	    if (dist < minDist) {
-	      minDist = dist;
-	      minNode = leaf(i);
-	    }
-      }    
-      minNode.node ! Deliver(msg, key );
+      findMin(key).node ! Deliver(msg, key );
    }
     
   def fowardToleaf(msg:String, key: Node_Actor) {
-      var minDist : BigInt = (ID - key.id).abs;
-      var minNode :Node_Actor = new Node_Actor();
-      minNode.id = ID;
-      minNode.node = self;
-      var dist: BigInt =0
-      val leaf = leafSmall ++ leafLarge     
-      for (i <- 0 until leaf.size) {
-	    dist = (leaf(i).id - key.id).abs;
-	    if (dist < minDist) {
-	      minDist = dist;
-	      minNode = leaf(i);
-	    }
-      } 
-      minNode.node ! Route( msg, key );
+      findMin(key).node ! Route( msg, key );
    }
+  
+  def findMin(key: Node_Actor): Node_Actor = {
+    var minDist : BigInt = (ID - key.id).abs;
+    var minNode :Node_Actor = new Node_Actor();
+    minNode.id = ID;
+    minNode.node = self;
+    var dist: BigInt =0
+    val leaf = leafSmall ++ leafLarge
+    for (i <- 0 until leaf.size) {
+	  dist = (leaf(i).id - key.id).abs;
+	  if (dist < minDist) {
+	    minDist = dist;
+	    minNode = leaf(i);
+	  }
+    } 
+    return minNode
+  }
       
   
   def shl( x: BigInt, y: BigInt ) : Int = {
@@ -314,85 +301,67 @@ object project3_smc {
       }
     return ID_Array
   }
-
 }
-
-  class Listener extends Actor {
+ 
+  class pastryBoss(numNodes:Int, numRequests:Int, base:Int) extends Actor {
+    var nodeArray = ArrayBuffer[ActorRef]()
     var sum: Double = 0 
-    var messages = 0 
+    var messages: Double = 0 
+    var average: Double = 0 
+    
     def receive = {
+      case BuildNetwork => {
+        var ID:BigInt = 0
+        var IDs : ArrayBuffer[BigInt] = ArrayBuffer();
+        var counter: Int =0
+        while(counter<numNodes){ 
+          ID = genID(base) 
+          while (IDs.contains( ID )) {
+	        ID = genID(base) 
+          }
+          IDs.append( ID );
+          var node = context.actorOf(Props(classOf[PastryNode],ID,base,self), counter.toString)
+          nodeArray.append(node)
+          counter += 1
+        } 
+        nodeArray(0) ! Join(null) 
+        for (i <- 1 until numNodes) {
+          nodeArray(i) ! Join(nodeArray(i -1)) 
+          implicit val timeout = Timeout(20 seconds)
+          var node_ready: Boolean = false
+          while (!node_ready) {
+	        val future = nodeArray(i) ? isReady
+	        node_ready =  Await.result(future.mapTo[Boolean], timeout.duration )
+          }
+        }  
+      }
+      
+      case StartWork => {
+        for (i <- 0 until numNodes) {
+          context.system.scheduler.schedule(1 seconds, 1 seconds, nodeArray(i), SendRequest );
+        }
+      }
       case Jumps(jumps : Int) => {
 	    sum += jumps
 	    messages += 1
-      }
-      case Calculate => {
-	    var average: Double = 0
-	    if (messages != 0) {
-	      average = sum/messages 
+	    if(messages >= numNodes*numRequests){
+	      average = sum/messages
+	      println("Num = " + numNodes + "  Average jumps: " + average)
+	      context.system.shutdown
 	    }
-	    sender ! average
-      }
-      case MessagesReceived => {
-	    sender ! messages
       }
     }
   }
   
   def main(args: Array[String]) {
-    val numNodes = if (args.length > 0) args(0) toInt else 7000  // the number of Nodes
+    val numNodes = if (args.length > 0) args(0) toInt else 1000  // the number of Nodes
     val numRequests = if (args.length > 1) args(1) toInt else 10   // the number of Requests for each node
-      
-    val system = ActorSystem("PastrySystem")
-    val listener = system.actorOf(Props(classOf[Listener]), "listener")
     val b = 4 
     val base = math.pow(2,b).toInt //base
- 
-    var ID:BigInt = 0
-    var IDs : ArrayBuffer[BigInt] = ArrayBuffer();
-    var counter: Int =0
-    var nodeArray = ArrayBuffer[ActorRef]()
-    while(counter<numNodes){ 
-      ID = genID(base) 
-      while (IDs.contains( ID )) {
-	    ID = genID(base) 
-      }
-      IDs.append( ID );
-      var node = system.actorOf(Props(classOf[PastryNode],ID,base,listener), counter.toString)
-      nodeArray.append(node)
-      counter += 1
-    }  
-      //add first node
-    nodeArray(0) ! Join(null)  
-  
-    //add other nodes
-    var i : Int = 0;
-    for (i <- 1 until numNodes) {
-      nodeArray(i) ! Join(nodeArray(i -1)) 
-      implicit val timeout = Timeout(20 seconds)
-      var node_ready: Boolean = false
-      while (!node_ready) {
-	    val future = nodeArray(i) ? isReady
-	    node_ready =  Await.result(future.mapTo[Boolean], timeout.duration )
-      }
-    }
-    
-    for (i <- 0 until numNodes) {
-      system.scheduler.schedule(1 seconds, 1 seconds, nodeArray(i), SendRequest );
-    }
-
-    var Messages: Int = 0
-    while (Messages < numNodes*numRequests) {
-      implicit val timeout = Timeout(20 seconds)
-      val future = listener ? MessagesReceived
-      Messages =  Await.result(future.mapTo[Int], timeout.duration )
-    }
-    
-    implicit val timeout2 = Timeout(20 seconds)
-    val future2 = listener ? Calculate
-    val average =  Await.result(future2.mapTo[Double], timeout2.duration )
-    println("Num = " + numNodes + "  Average jumps: " + average)
-   
-    system.shutdown  
+    val system = ActorSystem("PastrySystem")
+    val pastryBoss = system.actorOf(Props(classOf[pastryBoss],numNodes,numRequests,base), "pastryBoss")
+    pastryBoss ! BuildNetwork
+    pastryBoss ! StartWork
   }
   
   def genID(base:Int): BigInt = { 
