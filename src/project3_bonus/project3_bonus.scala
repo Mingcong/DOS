@@ -389,7 +389,7 @@ object project3_smc {
 //         while(!leafSmall(i).node.isTerminated){
 //           i = i +1
 //         }
-         if(leafSmall(0)!=null){
+         if(!leafSmall.isEmpty){
            leafSmall(0).node ! repairSmallLeaf(key,myNode,leafSmall,msg)
          }
        }else{
@@ -417,7 +417,7 @@ object project3_smc {
 //         while(!leafSmall(i).node.isTerminated){
 //           i = i +1
 //         }
-         if(leafSmall(0)!=null){
+         if(!leafSmall.isEmpty){
            leafSmall(0).node ! repairSmallLeaf(key,myNode,leafSmall,msg)
          }
          
