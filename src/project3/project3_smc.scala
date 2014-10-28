@@ -19,30 +19,30 @@ case class insertLeafs(finalNode:Node_Actor,leafLarge:ArrayBuffer[Node_Actor],le
 case class updateBigLeaf(leaf:Node_Actor)
 case class updateSmallLeaf(leaf:Node_Actor)
 case class Jumps(jumps:Int)
-case object SendRequest extends Message
+case class SendRequest(ids:ArrayBuffer[BigInt],num:Int)
 case object BuildNetwork extends Message
 case object StartWork extends Message
 
 class Node_Actor {
-  var node : ActorRef = null;
-  var id : BigInt = 0;
+  var node : ActorRef = null
+  var id : BigInt = 0
   var jumps: Int = 0
 }
 
-object project3_smc {
+object project3 {
  class PastryNode(ID:BigInt,base: Int, Boss:ActorRef) extends Actor {
   var routingTable = ArrayBuffer[Node_Actor]()
   var leafSmall,leafLarge = ArrayBuffer[Node_Actor]()
   val(rows,cols) = (32, base)
-  var joined: Boolean = false;
+  var joined: Boolean = false 
   
   def receive = {
-    case SendRequest => {
-	  var number : BigInt = genID( base );
-	  var msgDest : Node_Actor = new Node_Actor();
-	  msgDest.id = genID(base)
-	  msgDest.jumps = 0;	
-	  self ! Route( number.toString, msgDest );
+    case SendRequest(ids,num) => {
+      val random = new Random()	 
+	  var msgDest : Node_Actor = new Node_Actor() 
+	  msgDest.id = ids(random.nextInt(num))
+	  msgDest.jumps = 0 	
+	  self ! Route( "hi", msgDest ) 
     }
           
     case Join(node) => {
@@ -64,6 +64,7 @@ object project3_smc {
         myNode.node = self
         key.node ! insertRoutingTable(routingTable, myNode)
       }
+      key.jumps = key.jumps + 1
       var isInleaf: Boolean =false
       if(leafLarge.isEmpty){
         if(leafSmall.isEmpty){
@@ -102,7 +103,7 @@ object project3_smc {
           }
         }
       }
-      key.jumps = key.jumps + 1
+      
     }
     
     case insertRoutingTable(preRoutingTable, preNode) => {
@@ -210,59 +211,65 @@ object project3_smc {
   }
 
   def addToSmallLeafs(leaf:Node_Actor){ 
-      var i : Int = 0;
-      leafSmall.prepend( leaf );
+      var i : Int = 0 
+      leafSmall.prepend( leaf ) 
       while (i < leafSmall.size - 1) {
 	    if (leafSmall(i).id > leafSmall(i + 1).id) {
 	      var tmp = leafSmall(i)
 	      leafSmall(i) = leafSmall(i + 1)
 	      leafSmall(i + 1) = tmp
 	    }
-	    i += 1;
+	    i += 1 
       }
 
       if (leafSmall.size > base) {
-	    leafSmall = leafSmall.drop(1);
+	    leafSmall = leafSmall.drop(1) 
       }
   }
   
     def addToLargeLeafs(leaf:Node_Actor){
-      var i : Int = 0;
-      leafLarge.prepend( leaf );
+      var i : Int = 0 
+      leafLarge.prepend( leaf ) 
       while (i < leafLarge.size - 1) {
 	    if(leafLarge(i).id > leafLarge(i + 1).id) {
 	      var tmp = leafLarge(i)
 	      leafLarge(i) = leafLarge(i + 1)
 	      leafLarge(i + 1) = tmp  
 	    }
-	    i += 1;
+	    i += 1 
       }
       if (leafLarge.size > base) {
-	    leafLarge = leafLarge.dropRight(1);
+	    leafLarge = leafLarge.dropRight(1) 
       }
       
     }
       
    def sendToleaf(msg:String, key: Node_Actor) {
-      findMin(key).node ! Deliver(msg, key );
+      val findNode = findMin(key)
+      if(findNode.id == key.id || msg=="Join"){
+        findNode.node ! Deliver(msg, key ) 
+      }else{
+        findNode.node ! Route(msg, key ) 
+      }
+        
    }
     
   def fowardToleaf(msg:String, key: Node_Actor) {
-      findMin(key).node ! Route( msg, key );
+      findMin(key).node ! Route( msg, key ) 
    }
   
   def findMin(key: Node_Actor): Node_Actor = {
-    var minDist : BigInt = (ID - key.id).abs;
-    var minNode :Node_Actor = new Node_Actor();
-    minNode.id = ID;
-    minNode.node = self;
+    var minDist : BigInt = (ID - key.id).abs 
+    var minNode :Node_Actor = new Node_Actor() 
+    minNode.id = ID 
+    minNode.node = self 
     var dist: BigInt =0
     val leaf = leafSmall ++ leafLarge
     for (i <- 0 until leaf.size) {
-	  dist = (leaf(i).id - key.id).abs;
+	  dist = (leaf(i).id - key.id).abs 
 	  if (dist < minDist) {
-	    minDist = dist;
-	    minNode = leaf(i);
+	    minDist = dist 
+	    minNode = leaf(i) 
 	  }
     } 
     return minNode
@@ -276,14 +283,14 @@ object project3_smc {
     var equal : Boolean = (Array_x(31 - i) == Array_y(31 - i))
     while (equal) {
       if (i < 31) {
-	    i += 1;
+	    i += 1 
 	    equal = (Array_x(31 - i) == Array_y(31 - i))
       }else {
-	    i += 1;
-	    equal = false;
+	    i += 1 
+	    equal = false 
 	  }
     }
-    return i;  
+    return i   
   }
   
   def digit(id: BigInt, l: Int) = BigtoArray(id, 16)(31-l)
@@ -308,18 +315,17 @@ object project3_smc {
     var sum: Double = 0 
     var messages: Double = 0 
     var average: Double = 0 
-    
+    var IDs : ArrayBuffer[BigInt] = ArrayBuffer() 
     def receive = {
       case BuildNetwork => {
-        var ID:BigInt = 0
-        var IDs : ArrayBuffer[BigInt] = ArrayBuffer();
+        var ID:BigInt = 0       
         var counter: Int =0
         while(counter<numNodes){ 
           ID = genID(base) 
           while (IDs.contains( ID )) {
 	        ID = genID(base) 
           }
-          IDs.append( ID );
+          IDs.append( ID ) 
           var node = context.actorOf(Props(classOf[PastryNode],ID,base,self), counter.toString)
           nodeArray.append(node)
           counter += 1
@@ -338,7 +344,7 @@ object project3_smc {
       
       case StartWork => {
         for (i <- 0 until numNodes) {
-          context.system.scheduler.schedule(1 seconds, 1 seconds, nodeArray(i), SendRequest );
+          context.system.scheduler.schedule(1 seconds, 1 seconds, nodeArray(i), SendRequest(IDs,numNodes) ) 
         }
       }
       case Jumps(jumps : Int) => {
@@ -354,7 +360,7 @@ object project3_smc {
   }
   
   def main(args: Array[String]) {
-    val numNodes = if (args.length > 0) args(0) toInt else 1000  // the number of Nodes
+    val numNodes = if (args.length > 0) args(0) toInt else 5000  // the number of Nodes
     val numRequests = if (args.length > 1) args(1) toInt else 10   // the number of Requests for each node
     val b = 4 
     val base = math.pow(2,b).toInt //base

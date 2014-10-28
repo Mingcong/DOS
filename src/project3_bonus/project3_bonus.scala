@@ -20,7 +20,7 @@ case class insertLeafs(finalNode:Node_Actor,leafLarge:ArrayBuffer[Node_Actor],le
 case class updateBigLeaf(leaf:Node_Actor)
 case class updateSmallLeaf(leaf:Node_Actor)
 case class Jumps(jumps:Int)
-case object SendRequest extends Message
+case class SendRequest(ids:ArrayBuffer[BigInt]) 
 case object BuildNetwork extends Message
 case object StartWork extends Message
 case object DoFail extends Message
@@ -39,18 +39,12 @@ class Node_Actor {
   var jumps: Int = 0
 }
 
-object project3_smc {
- object deadActor extends Actor{
-   
-   def receive = {
-     case Stop =>
-       context.stop(self)
-   }
- }
+object project3_bonus {
  
  class PastryNode(ID:BigInt,base: Int, Boss:ActorRef) extends Actor {
   var routingTable = ArrayBuffer[Node_Actor]()
   var leafSmall,leafLarge = ArrayBuffer[Node_Actor]()
+  var NodeID = ID
   val(rows,cols) = (32, base)
   var joined: Boolean = false 
   
@@ -60,12 +54,12 @@ object project3_smc {
         context.stop(self)
       }
     }
-    case SendRequest => {
-	  var number : BigInt = genID( base ) 
+    case SendRequest(ids) => {
+      val random = new Random()	
 	  var msgDest : Node_Actor = new Node_Actor() 
-	  msgDest.id = genID(base)
+	  msgDest.id = ids(random.nextInt(ids.length))
 	  msgDest.jumps = 0 	
-	  self ! Route( number.toString, msgDest ) 
+	  self ! Route( "hi".toString, msgDest ) 
     }
           
     case Join(node) => {
@@ -87,6 +81,7 @@ object project3_smc {
         myNode.node = self
         key.node ! insertRoutingTable(routingTable, myNode)
       }
+      key.jumps = key.jumps + 1
       var isInleaf: Boolean =false
       if(leafLarge.isEmpty){
         if(leafSmall.isEmpty){
@@ -127,6 +122,7 @@ object project3_smc {
 	              val node_alive =  Await.result(future.mapTo[Node_Actor], timeout.duration )
 	              if((!node_alive.node.isTerminated)&&(node_alive.id != ID)){
 	                routingTable(ll*cols+key_col) = node_alive
+	                self ! Route(msg, key)
 	                flag = false                
 	              }
                 }
@@ -139,8 +135,7 @@ object project3_smc {
                   l = l + 1
                 }
               }          
-            }
-          self ! Route(msg, key)
+            }     
           }else{
             node.node ! Route(msg, key)
           }
@@ -151,7 +146,45 @@ object project3_smc {
               if(con){
                 if((routingTable(i*cols+j) != null) && ((routingTable(i*cols+j).id - key.id).abs < (ID-key.id).abs)){
                   con = false
-                  routingTable(i*cols+j).node ! Route(msg, key)
+                  //routingTable(i*cols+j).node ! Route(msg, key)
+          var i_l = i        
+          val node = routingTable(i_l*cols+j)
+          if(node.node.isTerminated){
+            routingTable(i*cols+j) = null
+            var myNode = new Node_Actor()
+            myNode.id = ID
+            myNode.node = self
+            var k: Int =0
+            var flag: Boolean=true
+            while(flag && (i_l<rows)){
+              if(k!=j){
+                val sel_node = routingTable(i_l*cols+k)
+                if(sel_node != null){
+                if(!sel_node.node.isTerminated){
+                  implicit val timeout = Timeout(20 seconds)
+                  val future = sel_node.node ? repairTable(msg,key,myNode,i,j)
+	              val node_alive =  Await.result(future.mapTo[Node_Actor], timeout.duration )
+	              if((!node_alive.node.isTerminated)&&(node_alive.id != ID)){
+	                routingTable(i*cols+j) = node_alive
+	                self ! Route(msg, key)
+	                flag = false                
+	              }
+                }
+                } 
+              }
+              if(flag){
+                k=k+1
+                if(k==cols){
+                  k = 0
+                  i_l = i_l + 1
+                }
+              }          
+            }     
+          }else{
+            node.node ! Route(msg, key)
+          }
+                  
+                  
                 }
               }
             }
@@ -161,7 +194,7 @@ object project3_smc {
           }
         }
       }
-      key.jumps = key.jumps + 1
+      
     }
     
     case insertRoutingTable(preRoutingTable, preNode) => {
@@ -270,7 +303,7 @@ object project3_smc {
           leafBuffer.append(node)
         }
       }
-      if(leafBuffer(0)!=null){
+      if(!leafBuffer.isEmpty){
       var min = (leafBuffer(0).id - myNode.id).abs
       var leafNode = leafBuffer(0)
       for(node <- leafBuffer){
@@ -291,6 +324,7 @@ object project3_smc {
           leafBuffer.append(node)
         }
       } 
+      if(!leafBuffer.isEmpty){
       var min = (leafBuffer(0).id - myNode.id).abs
       var leafNode = leafBuffer(0)
       for(node <- leafBuffer){
@@ -300,6 +334,7 @@ object project3_smc {
         }
       }
       myNode.node ! repairYourLargeLeaf(leafNode,key,msg)
+      }
     }
     
     case repairTable(msg,key,myNode,key_col,l) => {
@@ -308,7 +343,6 @@ object project3_smc {
         sender ! node
       }else{
         sender ! myNode
-
       }
       
     }
@@ -385,24 +419,21 @@ object project3_smc {
        myNode.node = self
        if(findMin(key).id < ID){
          leafSmall.remove(findNum(findMin(key),leafSmall))
-//         var i: Int=0
-//         while(!leafSmall(i).node.isTerminated){
-//           i = i +1
-//         }
          if(!leafSmall.isEmpty){
            leafSmall(0).node ! repairSmallLeaf(key,myNode,leafSmall,msg)
          }
        }else{
-//         var i: Int=1
-//         while(!leafLarge(leafLarge.length-i).node.isTerminated){
-//           i = i +1
-//         }
          if(leafLarge(leafLarge.length-1) != null){
            leafLarge(leafLarge.length-1).node ! repairLargeLeaf(key,myNode,leafLarge,msg)
          }
        }
      }else{
-       findMin(key).node ! Deliver(msg, key )
+      val findNode = findMin(key)
+      if(findNode.id == key.id || msg=="Join"){
+        findNode.node ! Deliver(msg, key ) 
+      }else{
+        findNode.node ! Route(msg, key ) 
+      }
      }
    }
     
@@ -413,19 +444,11 @@ object project3_smc {
        myNode.node = self
        if(findMin(key).id < ID){
          leafSmall.remove(findNum(findMin(key),leafSmall))
-//         var i: Int=0
-//         while(!leafSmall(i).node.isTerminated){
-//           i = i +1
-//         }
          if(!leafSmall.isEmpty){
            leafSmall(0).node ! repairSmallLeaf(key,myNode,leafSmall,msg)
          }
          
        }else{
-//         var i: Int=1
-//         while(!leafLarge(leafLarge.length-i).node.isTerminated){
-//           i = i +1
-//         }
          if(leafLarge(leafLarge.length-1) != null){
            leafLarge(leafLarge.length-1).node ! repairLargeLeaf(key,myNode,leafLarge,msg)
          }
@@ -490,14 +513,15 @@ object project3_smc {
  
   class pastryBoss(numNodes:Int, numRequests:Int, base:Int) extends Actor {
     var nodeArray = ArrayBuffer[ActorRef]()
+    var nodeAlive = ArrayBuffer[BigInt]()
     var sum: Double = 0 
     var messages: Double = 0 
     var average: Double = 0 
+    var IDs : ArrayBuffer[BigInt] = ArrayBuffer() 
     
     def receive = {
       case BuildNetwork => {
         var ID:BigInt = 0
-        var IDs : ArrayBuffer[BigInt] = ArrayBuffer() 
         var counter: Int =0
         while(counter<numNodes){ 
           ID = genID(base) 
@@ -522,12 +546,17 @@ object project3_smc {
       }
       
       case StartWork => {
+        for(i<-0 until numNodes){
+          if(!nodeArray(i).isTerminated){
+            nodeAlive.append(IDs(i))
+          }
+        }
         var flag: Boolean = true
         var i: Int = 0
         var num: Int =0
         while(flag){
           if(!nodeArray(i).isTerminated){
-            context.system.scheduler.schedule(0 seconds, 25 milliseconds, nodeArray(i), SendRequest )
+            context.system.scheduler.schedule(0 seconds, 25 milliseconds, nodeArray(i), SendRequest(nodeAlive) )
             num = num + 1
             if(num>=2){
               flag = false
@@ -539,14 +568,14 @@ object project3_smc {
       case Jumps(jumps : Int) => {
 	    sum += jumps
 	    messages += 1
-	    if(messages == 2000){
+	    if(messages == numRequests*2){
 	      average = sum/messages
 	      println("Num = " + numNodes + "  Average jumps: " + average)
 	      context.system.shutdown
 	    }
       }
       case DoFail => {
-        for(i<-1 until numNodes){
+        for(i<-0 until numNodes){
           var fail = math.random < 0.1
           nodeArray(i) ! Fail(fail)
         }
@@ -555,8 +584,8 @@ object project3_smc {
   }
   
   def main(args: Array[String]) {
-    val numNodes = if (args.length > 0) args(0) toInt else 10000  // the number of Nodes
-    val numRequests = if (args.length > 1) args(1) toInt else 10   // the number of Requests for each node
+    val numNodes = if (args.length > 0) args(0) toInt else 5000  // the number of Nodes
+    val numRequests = if (args.length > 1) args(1) toInt else 2000   // the number of Requests for each node
     val b = 4 
     val base = math.pow(2,b).toInt //base
     //val system = ActorSystem("PastrySystem")
